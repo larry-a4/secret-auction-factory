@@ -726,18 +726,27 @@ fn try_finalize<S: Storage, A: Api, Q: Querier>(
             });
             // if there was a winner, swap the tokens
             if let Some(winning_bid) = bid_list.pop() {
+                let mut second_highest_bid_amount = state.minimum_bid;
+                if let Some(second_highest_bid) = bid_list.last() {
+                    second_highest_bid_amount = second_highest_bid.bid.amount;
+                }
                 cos_msg.push(
                     state
                         .bid_contract
-                        .transfer_msg(state.seller.clone(), Uint128(winning_bid.bid.amount))?,
+                        .transfer_msg(state.seller.clone(), Uint128(second_highest_bid_amount))?,
                 );
                 let human_winner = deps.api.human_address(&winning_bid.bidder)?;
+                cos_msg.push(
+                    state
+                        .bid_contract
+                        .transfer_msg(human_winner.clone(), Uint128(winning_bid.bid.amount - second_highest_bid_amount))?,
+                );
                 cos_msg.push(
                     state
                         .sell_contract
                         .transfer_msg(human_winner.clone(), Uint128(state.sell_amount))?,
                 );
-                winning_amount = Some(Uint128(winning_bid.bid.amount));
+                winning_amount = Some(Uint128(second_highest_bid_amount));
                 if is_seller {
                     bid_tokens_received = winning_amount;
                 }
@@ -749,7 +758,7 @@ fn try_finalize<S: Storage, A: Api, Q: Querier>(
                 state.currently_consigned = 0;
                 update_state = true;
                 winner = Some(human_winner);
-                state.winning_bid = winning_bid.bid.amount;
+                state.winning_bid = second_highest_bid_amount;
                 remove(&mut deps.storage, &winning_bid.bidder.as_slice());
                 state
                     .bidders
@@ -2176,11 +2185,11 @@ mod tests {
             sell_decimals,
             bid_tokens_received,
         ) = extract_finalize_fields(&handle_result);
-        assert_eq!(winning_bid, Some(Uint128(1000)));
+        assert_eq!(winning_bid, Some(Uint128(200)));
         assert_eq!(bid_decimals, Some(8));
         assert_eq!(sell_tokens_received, Some(Uint128(10)));
         assert_eq!(sell_decimals, Some(4));
-        assert_eq!(bid_tokens_received, Some(Uint128(1000)));
+        assert_eq!(bid_tokens_received, Some(Uint128(200)));
         assert!(message.contains("Sale has been finalized.  You have been sent the winning bid.  Your bid won! You have been sent the sale token(s)"));
 
         // test 3 bidders, seller loses, seller closes
@@ -2311,11 +2320,11 @@ mod tests {
             sell_decimals,
             bid_tokens_received,
         ) = extract_finalize_fields(&handle_result);
-        assert_eq!(winning_bid, Some(Uint128(1000)));
+        assert_eq!(winning_bid, Some(Uint128(200)));
         assert_eq!(bid_decimals, Some(8));
         assert_eq!(sell_tokens_received, None);
         assert_eq!(sell_decimals, None);
-        assert_eq!(bid_tokens_received, Some(Uint128(1025)));
+        assert_eq!(bid_tokens_received, Some(Uint128(225)));
         assert!(message.contains("Sale has been finalized.  You have been sent the winning bid.  Your bid did not win and has been returned"));
 
         // test 3 bidders, loser closes
@@ -2582,11 +2591,11 @@ mod tests {
             sell_decimals,
             bid_tokens_received,
         ) = extract_finalize_fields(&handle_result);
-        assert_eq!(winning_bid, Some(Uint128(1000)));
+        assert_eq!(winning_bid, Some(Uint128(200)));
         assert_eq!(bid_decimals, Some(8));
         assert_eq!(sell_tokens_received, None);
         assert_eq!(sell_decimals, None);
-        assert_eq!(bid_tokens_received, Some(Uint128(1000)));
+        assert_eq!(bid_tokens_received, Some(Uint128(200)));
         assert!(message.contains("Sale has been finalized.  You have been sent the winning bid"));
         assert!(!message.contains("Sale has been finalized.  You have been sent the winning bid."));
 
@@ -2724,7 +2733,7 @@ mod tests {
             sell_decimals,
             bid_tokens_received,
         ) = extract_finalize_fields(&handle_result);
-        assert_eq!(winning_bid, Some(Uint128(1000)));
+        assert_eq!(winning_bid, Some(Uint128(200)));
         assert_eq!(bid_decimals, Some(8));
         assert_eq!(sell_tokens_received, None);
         assert_eq!(sell_decimals, None);
